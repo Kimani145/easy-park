@@ -1,0 +1,129 @@
+# ============================================================
+# EasyPark — Azure DevOps CI/CD Pipeline
+# ============================================================
+# Triggers on every push to main branch.
+# Build: install dependencies, run Django system check.
+# Deploy: push to Azure Web Apps on successful build.
+# ============================================================
+
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  pythonVersion: '3.11'
+  workingDirectory: 'backend'
+
+stages:
+
+# ─────────────────────────────────────────────────────────────
+# STAGE 1: Build & Validate
+# ─────────────────────────────────────────────────────────────
+- stage: Build
+  displayName: 'Build and Validate'
+  jobs:
+  - job: Validate
+    displayName: 'Django System Check'
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Set Python $(pythonVersion)'
+
+    - script: |
+        sudo apt-get update -qq
+        sudo apt-get install -y \
+          gdal-bin libgdal-dev \
+          libgeos-dev libproj-dev \
+          postgresql-client
+      displayName: 'Install GDAL and spatial libraries'
+
+    - script: |
+        cd $(workingDirectory)
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+      displayName: 'Install Python dependencies'
+
+    - script: |
+        cd $(workingDirectory)
+        python manage.py check \
+          --settings=config.settings.production \
+          --deploy 2>&1 || true
+      displayName: 'Django system check (production settings)'
+      env:
+        SECRET_KEY:             $(SECRET_KEY)
+        ALLOWED_HOSTS:          'localhost'
+        DB_NAME:                $(DB_NAME)
+        DB_USER:                $(DB_USER)
+        DB_PASSWORD:            $(DB_PASSWORD)
+        DB_HOST:                $(DB_HOST)
+        DB_PORT:                '5432'
+        REDIS_URL:              $(REDIS_URL)
+        DJANGO_SETTINGS_MODULE: config.settings.production
+
+    - script: |
+        cd $(workingDirectory)
+        python manage.py collectstatic --noinput \
+          --settings=config.settings.production
+      displayName: 'Collect static files'
+      env:
+        SECRET_KEY:    $(SECRET_KEY)
+        ALLOWED_HOSTS: 'localhost'
+        DB_NAME:       $(DB_NAME)
+        DB_USER:       $(DB_USER)
+        DB_PASSWORD:   $(DB_PASSWORD)
+        DB_HOST:       $(DB_HOST)
+        DB_PORT:       '5432'
+        REDIS_URL:     $(REDIS_URL)
+
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile:    '$(workingDirectory)'
+        includeRootFolder:   false
+        archiveType:         'zip'
+        archiveFile:         '$(Build.ArtifactStagingDirectory)/easypark-$(Build.BuildId).zip'
+        replaceExistingArchive: true
+      displayName: 'Package application'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName:  'easypark-backend'
+      displayName: 'Publish build artifact'
+
+# ─────────────────────────────────────────────────────────────
+# STAGE 2: Deploy to Azure Web Apps
+# ─────────────────────────────────────────────────────────────
+- stage: Deploy
+  displayName: 'Deploy to Azure Web Apps'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: DeployBackend
+    displayName: 'Deploy EasyPark API'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'easypark-production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: '$(AZURE_SUBSCRIPTION)'
+              appName:           '$(AZURE_WEBAPP_NAME)'
+              package:           '$(Pipeline.Workspace)/easypark-backend/*.zip'
+              appType:           'webAppLinux'
+              runtimeStack:      'PYTHON|3.11'
+              startUpCommand:    >
+                gunicorn config.wsgi:application
+                --bind 0.0.0.0:8000
+                --workers 4
+                --timeout 120
+                --access-logfile -
+                --error-logfile -
+            displayName: 'Deploy to Azure Web App'

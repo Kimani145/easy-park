@@ -15,7 +15,7 @@ urlpatterns = [
     path('api/v1/auth/', include('apps.accounts.urls', namespace='accounts')),
     path('api/v1/slots/', include('apps.parking.urls', namespace='parking')),
     path('api/v1/', include('apps.logs.urls')),
-    path('api/v1/admin/', include('apps.admin_panel.urls', namespace='admin_panel')),
+    path('api/v1/', include('apps.admin_panel.urls', namespace='admin_panel')),
 ]
 
 if settings.DEBUG:
