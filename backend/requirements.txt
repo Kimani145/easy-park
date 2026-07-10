@@ -9,3 +9,4 @@ django-redis
 redis
 
 
+gunicorn==21.*
