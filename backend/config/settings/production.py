@@ -86,9 +86,10 @@ CACHES = {
 # CORS — restrict to explicit origins in production
 # ---------------------------------------------------------------------------
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=lambda v: [
-    s.strip() for s in v.split(',')
-], default='')
+CORS_ALLOWED_ORIGINS_RAW = config('CORS_ALLOWED_ORIGINS', default='')
+CORS_ALLOWED_ORIGINS = [
+    s.strip() for s in CORS_ALLOWED_ORIGINS_RAW.split(',') if s.strip()
+] if CORS_ALLOWED_ORIGINS_RAW else []
 
 # ---------------------------------------------------------------------------
 # Logging — structured, console-only (Azure streams stdout to App Insights)
