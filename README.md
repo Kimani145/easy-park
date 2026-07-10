@@ -15,13 +15,14 @@ The system is organized into modular Django applications within the `backend/app
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Tech Stack & Infrastructure
 
 - **Framework**: Django 4.2 & Django REST Framework (DRF)
-- **Database**: PostgreSQL with PostGIS extension (via GeoDjango)
-- **Cache & Session Store**: Redis (via `django-redis`)
+- **Database**: Supabase PostgreSQL with PostGIS extension (via GeoDjango)
+- **Cache & Session Store**: Upstash Redis (via `django-redis` over TLS)
 - **Security & Auth**: JWT (SimpleJWT), BCrypt password hashing
-- **Deployment & Gateway**: Nginx configuration included in `nginx/`
+- **Hosting Platform**: Fly.io (shared-1x, 512MB RAM machines)
+- **CI/CD**: GitHub Actions (runs automated validation and remote deployments)
 
 ---
 
@@ -29,6 +30,9 @@ The system is organized into modular Django applications within the `backend/app
 
 ```text
 EasyPark/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml       # GitHub Actions CI/CD workflow
 ├── backend/
 │   ├── apps/
 │   │   ├── accounts/       # User & Role management
@@ -42,7 +46,12 @@ EasyPark/
 │   ├── nginx/              # Nginx gateway configurations
 │   ├── manage.py           # Django management utility
 │   ├── requirements.txt    # Python package dependencies
-│   └── easy-park-architect.agent.md  # Backend Developer/Agent Operating Doctrine
+│   └── easy-park-architect.agent.md  # Backend Developer Operating Doctrine
+├── docs/
+│   ├── UAT_RESULTS.md      # Live production verification test results
+│   ├── frontend_handbook.md # API specifications for Frontend developers
+│   ├── qa_handbook.md       # Test scenarios and NFR verification details
+│   └── backend_reference.md # Database schemas and settings documentation
 ├── .env.example            # Environment variables template
 ├── .gitignore              # Git ignored files & directories
 └── README.md               # Project documentation (this file)
@@ -62,7 +71,7 @@ Key environment variables to configure:
 * **`DEBUG`**: Toggle debug mode (`True` in development, `False` in production).
 * **`DB_ENGINE`**: Geographic database engine (`django.contrib.gis.db.backends.postgis`).
 * **`DB_NAME` / `DB_USER` / `DB_PASSWORD`**: PostGIS database credentials.
-* **`REDIS_URL`**: Cache store address (default: `redis://127.0.0.1:6379/1`).
+* **`REDIS_URL`**: Cache store address.
 * **`JWT_SECRET_KEY`**: Secret key used to sign JSON Web Tokens.
 
 ---
@@ -74,6 +83,7 @@ Make sure you have the following installed on your machine:
 * Python 3.10+
 * PostgreSQL + PostGIS extension
 * Redis Server
+* Conda (optional, environment file included)
 
 ### Steps
 
@@ -82,48 +92,45 @@ Make sure you have the following installed on your machine:
    cd EasyPark
    ```
 
-2. **Set up Virtual Environment**
+2. **Activate Conda Environment**
    ```bash
-   python3 -m venv backend/.venv
-   source backend/.venv/bin/activate
+   conda activate easypark
    ```
 
 3. **Install Dependencies**
    ```bash
-   pip install -r backend/requirements.txt
+   cd backend
+   pip install -r requirements.txt
    ```
 
 4. **Run System Checks & Database Migrations**
    ```bash
-   python backend/manage.py check
-   python backend/manage.py migrate
+   python manage.py check
+   python manage.py migrate
    ```
 
 5. **Start Development Server**
    ```bash
-   python backend/manage.py runserver
+   python manage.py runserver
    ```
-   The API will be accessible at `http://127.0.0.1:8000/`.
+   The API will be accessible locally at `http://127.0.0.1:8000/`.
 
 ---
 
-## 🛡️ Developer Operating Doctrine & Rules
+## 🧪 Verification & Production Testing
 
-Developers and coding agents MUST adhere to the following constraints laid out in the project doctrine:
+To run the automated verification suite against the live production server:
 
-### 1. Spatial Integrity
-* Every spatial field representing real-world coordinates **MUST** use `geography=True, srid=4326`.
-* Import spatial models from `django.contrib.gis.db import models as gis_models` (never from `django.db`).
-* Geofence boundary checks (ST_DWithin) **MUST** use the `D(m=15)` measure class to prevent unit mismatch.
+```bash
+cd backend
+python manage.py test_production --base-url https://easypark-backend.fly.dev --settings=config.settings.development
+```
 
-### 2. Authentication & RBAC
-* All endpoints must specify explicit `permission_classes` (e.g., `IsDriver`, `IsMarshal`, or `IsAdmin`).
-* JWT tokens must carry the user's `role` claim in the payload.
+---
 
-### 3. Idempotency & Conflict Resolution
-* The bulk sync endpoint enforces database-level idempotency via a `UNIQUE` constraint on `update_logs.idempotency_key`. Always use `get_or_create` with this key.
-* Magic numbers are strictly forbidden. Use configurations defined in `backend/config/constants.py`:
-  - `GEOFENCE_RADIUS_METERS = 15`
-  - `MAX_SPEED_MS = 55` (Spoofing threshold)
-  - `DRIVER_SOURCE_WEIGHT = 0.40`
-  - `MARSHAL_SOURCE_WEIGHT = 1.00`
+## 📖 Handbooks & Documentation
+
+* Refer to the [Frontend Integration Handbook](file:///home/kimani/Projects/EasyPark/docs/frontend_handbook.md) for endpoint mappings, role claims, and integration schemas.
+* Refer to the [QA Test Handbook](file:///home/kimani/Projects/EasyPark/docs/qa_handbook.md) for UAT profile steps, NFR sizes/latencies, and manual checking instructions.
+* Refer to the [Backend Reference](file:///home/kimani/Projects/EasyPark/docs/backend_reference.md) for a deep dive into schemas, models, and cache configuration.
+* View the latest [UAT Test Results](file:///home/kimani/Projects/EasyPark/docs/UAT_RESULTS.md) verified against the live environment.
