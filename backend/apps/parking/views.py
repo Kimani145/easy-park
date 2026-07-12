@@ -160,15 +160,15 @@ class MapGridView(APIView):
             'id', 'slot_code', 'current_status', 'coordinate'
         )
 
-        # 6. Serialize to minimal payload (abbreviated keys to comply with NFR-1 < 5KB)
+        # 6. Serialize payload (full field names; ~760 B for 8 slots, well within NFR-1 < 5 KB)
         payload = []
         for s in slots:
             payload.append({
-                'id': str(s['id']),
-                'c':  s['slot_code'],
-                's':  s['current_status'],
-                'lat': s['coordinate'].y,
-                'lng': s['coordinate'].x,
+                'id':             str(s['id']),
+                'slot_code':      s['slot_code'],
+                'current_status': s['current_status'],
+                'latitude':       s['coordinate'].y,
+                'longitude':      s['coordinate'].x,
             })
 
         # 7. Cache the result

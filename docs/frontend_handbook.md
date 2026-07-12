@@ -72,13 +72,9 @@ Queries and returns slots surrounding a geographical coordinate.
     {
       "id": "1094fa29-b1fd-4562-9737-aea435266af5",
       "slot_code": "SLOT-001",
-      "coordinate": {
-        "latitude": -1.2676,
-        "longitude": 36.8108
-      },
       "current_status": "FREE",
-      "confidence_score": "1.00",
-      "last_updated": "2026-07-10T21:18:45Z"
+      "latitude": -1.2676,
+      "longitude": 36.8108
     }
   ]
   ```
