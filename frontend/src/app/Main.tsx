@@ -52,6 +52,35 @@ const TIME_SLOTS = Array.from({ length: 24 }, (_, i) => {
 function genId() { return "EP" + Math.random().toString(36).substring(2, 8).toUpperCase(); }
 function genSpot() { return `${Math.floor(Math.random()*5)+1}-${String(Math.floor(Math.random()*40)+1).padStart(2,"0")}`; }
 
+/* ── Geo helpers ── */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+    Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+function fmtDistance(km: number): string {
+  return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+}
+function fmtWalk(km: number): string {
+  return `${Math.max(1, Math.round(km / 0.083))} min`;
+}
+function fmtDrive(km: number): string {
+  return `${Math.max(1, Math.round(km / 0.5))} min`;
+}
+function slotName(s: {street_name: string; zone: string; slot_code: string}): string {
+  if (s.street_name && s.street_name !== 'Unknown Street') return s.street_name;
+  return s.zone ? `${s.zone} Parking` : s.slot_code;
+}
+function slotPrice(zone: string): { label: string; num: number } {
+  if (zone === 'CBD') return { label: 'KES 100/hr', num: 100 };
+  if (zone === 'Westlands') return { label: 'KES 80/hr', num: 80 };
+  if (zone === 'Kilimani') return { label: 'KES 70/hr', num: 70 };
+  return { label: 'KES 50/hr', num: 50 };
+}
+
 /* ── Helpers ── */
 const availColor = (a: number, t: number) => { const r=a/t; return r>0.4?"text-[#39e079]":r>0.15?"text-[#e0a839]":"text-[#e05555]"; };
 const availBg    = (a: number, t: number) => { const r=a/t; return r>0.4?"bg-[#39e079]/15 border-[#39e079]/30":r>0.15?"bg-[#e0a839]/15 border-[#e0a839]/30":"bg-[#e05555]/15 border-[#e05555]/30"; };
@@ -581,26 +610,39 @@ export default function Main() {
     async function loadSlots() {
       if (!userLoc) return;
       try {
-        const slots = await apiFetch<any[]>(`/api/v1/slots/map-grid/?lat=${userLoc[0]}&lng=${userLoc[1]}`);
-        const mapped: Parking[] = slots.map(s => ({
-          id: s.id,
-          name: s.slot_code,
-          address: "Nairobi",
-          distance: "0.1 mi",
-          distanceNum: 0.1,
-          walkTime: "2 min",
-          driveTime: "1 min",
-          price: "",
-          priceNum: 0,
-          available: s.current_status === "FREE" ? 1 : 0,
-          total: 1,
-          status: s.current_status,
-          rating: 5.0,
-          features: ["Open Air"],
-          lat: s.latitude,
-          lng: s.longitude,
-          open24h: true
-        }));
+        const [uLat, uLng] = userLoc;
+        const slots = await apiFetch<any[]>(
+          `/api/v1/slots/map-grid/?lat=${uLat}&lng=${uLng}&radius=1000`
+        );
+        const mapped: Parking[] = slots.map(s => {
+          const distKm = haversineKm(uLat, uLng, s.latitude, s.longitude);
+          const { label: priceLabel, num: priceNum } = slotPrice(s.zone);
+          return {
+            id: s.id,
+            name: slotName(s),
+            address: s.street_name !== 'Unknown Street'
+              ? `${s.street_name}, ${s.zone}`
+              : s.zone || 'Nairobi',
+            distance: fmtDistance(distKm),
+            distanceNum: distKm,
+            walkTime: fmtWalk(distKm),
+            driveTime: fmtDrive(distKm),
+            price: priceLabel,
+            priceNum,
+            available: s.current_status === 'FREE' ? 1 : 0,
+            total: 1,
+            status: s.current_status,
+            rating: Number((3.8 + Math.random() * 1.1).toFixed(1)),
+            features: [
+              s.parking_type === 'multi-storey' ? 'Multi-Storey'
+              : s.parking_type === 'underground' ? 'Underground'
+              : 'Open Air'
+            ],
+            lat: s.latitude,
+            lng: s.longitude,
+            open24h: true,
+          };
+        }).sort((a, b) => a.distanceNum - b.distanceNum);
         setParkings(mapped);
         if (mapped.length > 0) setSelected(mapped[0]);
         else setSelected(null);
@@ -617,7 +659,10 @@ export default function Main() {
     try {
       await apiFetch(`/api/v1/slots/${r.parkingId}/checkin/`, {
         method: "POST",
-        body: JSON.stringify({ latitude: -1.2676, longitude: 36.8108 })
+        body: JSON.stringify({
+          latitude:  userRealLocation ? userRealLocation[0] : (userLoc ? userLoc[0] : -1.2676),
+          longitude: userRealLocation ? userRealLocation[1] : (userLoc ? userLoc[1] : 36.8108),
+        })
       });
       setReservations(prev=>[...prev,r]);
       setParkings(prev=>prev.map(p=>p.id===r.parkingId?{...p,available:0}:p));
