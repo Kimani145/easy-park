@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
+import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { useNavigate, Link } from "react-router";
 import { Drawer } from "vaul";
+import { Root as VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   MapPin, Navigation, Clock, Car, Search, Star, Zap, X, ArrowLeft,
   CircleParking, LocateFixed, CalendarClock, CheckCircle2, ChevronDown,
@@ -17,6 +21,7 @@ type Parking = {
   walkTime: string; driveTime: string;
   price: string; priceNum: number;
   available: number; total: number;
+  status: string;
   rating: number; features: string[];
   lat: number; lng: number; open24h: boolean;
 };
@@ -52,58 +57,105 @@ const availBg    = (a: number, t: number) => { const r=a/t; return r>0.4?"bg-[#3
 const pinColor   = (a: number, t: number) => { const r=a/t; return r>0.4?"#39e079":r>0.15?"#e0a839":"#e05555"; };
 const barColor   = (a: number, t: number) => { const r=a/t; return r>0.4?"bg-[#39e079]":r>0.15?"bg-[#e0a839]":"bg-[#e05555]"; };
 
-/* ── Map ── */
-function MapView({ parkings, selected, onSelect }: { parkings: Parking[]; selected: Parking|null; onSelect:(p:Parking)=>void }) {
-  // Nairobi bounding box based on API responses
-  const minLat=-1.275,maxLat=-1.260,minLng=36.800,maxLng=36.820;
-  const toXY=(lat:number,lng:number,w:number,h:number)=>({ x:((lng-minLng)/(maxLng-minLng))*w, y:h-((lat-minLat)/(maxLat-minLat))*h });
+const createPinIcon = (a: number, t: number, isSel: boolean) => {
+  const pc = pinColor(a, t);
+  const size = isSel ? 26 : 20;
+  const bg = isSel ? pc : "#1e2520";
+  const border = isSel ? "none" : `1.5px solid ${pc}`;
+  const color = isSel ? "#0a0f0c" : pc;
+  return L.divIcon({
+    className: "custom-pin",
+    html: `<div style="width:${size}px; height:${size}px; background:${bg}; border:${border}; border-radius:50%; display:flex; align-items:center; justify-content:center; color:${color}; font-weight:bold; font-size:${isSel?12:10}px; box-shadow: 0 2px 5px rgba(0,0,0,0.5);">P</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size/2, size/2],
+  });
+};
+
+const userIcon = L.divIcon({
+  className: "user-pin",
+  html: `<div style="width:16px; height:16px; background:#39e079; border:2px solid #fff; border-radius:50%; box-shadow: 0 0 10px #39e079;"></div>`,
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
+
+function MapClickHandler({ onLocationSelect }: { onLocationSelect: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(e) {
+      const { lat, lng } = e.latlng;
+      onLocationSelect(lat, lng);
+    },
+  });
+  return null;
+}
+
+function MapView({ parkings, selected, userLoc, onSelect, onMapClick, userRealLocation }: { parkings: Parking[]; selected: Parking|null; userLoc: [number, number] | null; onSelect:(p:Parking)=>void; onMapClick: (lat: number, lng: number) => void; userRealLocation: [number, number] | null; }) {
+  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  const [route, setRoute] = useState<[number, number][] | null>(null);
+  const [routeError, setRouteError] = useState(false);
+
+  useEffect(() => {
+    if (userLoc && selected) {
+      const fetchRoute = async () => {
+        try {
+          const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${userLoc[1]},${userLoc[0]};${selected.lng},${selected.lat}?geometries=geojson`);
+          const data = await res.json();
+          if (data.routes && data.routes[0]) {
+            const coords = data.routes[0].geometry.coordinates.map((c: [number, number]) => [c[1], c[0]] as [number, number]);
+            setRoute(coords);
+            setRouteError(false);
+          } else {
+            setRoute(null);
+            setRouteError(true);
+          }
+        } catch (err) {
+          setRoute(null);
+          setRouteError(true);
+        }
+      };
+      fetchRoute();
+    } else {
+      setRoute(null);
+      setRouteError(false);
+    }
+  }, [userLoc, selected]);
+
+  const center: [number, number] = userLoc || [-1.2676, 36.8108];
+
   return (
-    <div className="relative w-full h-full overflow-hidden bg-[#111614] dark:bg-[#111614] rounded-xl">
-      <svg viewBox="0 0 600 460" className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
-            <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>
-          </pattern>
-        </defs>
-        <rect width="600" height="460" fill="url(#grid)"/>
-        {[[40,30,160,80],[220,30,120,80],[360,30,180,80],[40,140,100,100],[160,130,180,100],[360,130,80,110],[460,130,100,60],[40,270,140,90],[200,260,100,110],[320,250,200,90],[40,390,100,60],[160,380,140,70],[320,370,100,70],[440,360,120,70]].map(([x,y,w,h],i)=>(
-          <rect key={i} x={x} y={y} width={w} height={h} rx={3} fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.07)" strokeWidth="0.5"/>
+    <div className="relative w-full h-full overflow-hidden bg-[#111614] rounded-xl">
+      <MapContainer center={center} zoom={14} style={{ width: "100%", height: "100%", background: "#111614" }} zoomControl={false} ref={setMapInstance}>
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        />
+        <MapClickHandler onLocationSelect={(lat, lng) => onMapClick(lat, lng)} />
+        {userLoc && <Marker position={userLoc} icon={userIcon} />}
+        {parkings.map(p => (
+          <Marker 
+            key={p.id} 
+            position={[p.lat, p.lng]} 
+            icon={createPinIcon(p.available, p.total, selected?.id === p.id)}
+            eventHandlers={{ click: () => onSelect(p) }}
+          />
         ))}
-        <line x1="0" y1="120" x2="600" y2="120" stroke="rgba(255,255,255,0.12)" strokeWidth="8"/>
-        <line x1="0" y1="240" x2="600" y2="240" stroke="rgba(255,255,255,0.12)" strokeWidth="8"/>
-        <line x1="0" y1="360" x2="600" y2="360" stroke="rgba(255,255,255,0.09)" strokeWidth="5"/>
-        <line x1="150" y1="0" x2="150" y2="460" stroke="rgba(255,255,255,0.12)" strokeWidth="8"/>
-        <line x1="310" y1="0" x2="310" y2="460" stroke="rgba(255,255,255,0.12)" strokeWidth="8"/>
-        <line x1="460" y1="0" x2="460" y2="460" stroke="rgba(255,255,255,0.09)" strokeWidth="5"/>
-        {[120,240].map(y=><line key={y} x1="0" y1={y} x2="600" y2={y} stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="20 14"/>)}
-        {[150,310].map(x=><line key={x} x1={x} y1="0" x2={x} y2="460" stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="20 14"/>)}
-        <g>
-          <circle cx={295} cy={225} r={16} fill="rgba(57,224,121,0.15)"/>
-          <circle cx={295} cy={225} r={8} fill="#39e079"/>
-          <circle cx={295} cy={225} r={4} fill="#0c0f0e"/>
-          <circle cx={295} cy={225} r={20} fill="none" stroke="#39e079" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.5">
-            <animateTransform attributeName="transform" type="rotate" from="0 295 225" to="360 295 225" dur="12s" repeatCount="indefinite"/>
-          </circle>
-        </g>
-        {selected&&(()=>{ const {x,y}=toXY(selected.lat,selected.lng,600,460); return <line x1={295} y1={225} x2={x} y2={y} stroke="#39e079" strokeWidth="1.5" strokeDasharray="6 4" opacity="0.5"/>; })()}
-        {parkings.map(p=>{
-          const {x,y}=toXY(p.lat,p.lng,600,460);
-          const isSel=selected?.id===p.id;
-          const pc=pinColor(p.available,p.total);
-          return (
-            <g key={p.id} style={{cursor:"pointer"}} onClick={()=>onSelect(p)} transform={`translate(${x},${y})`}>
-              {isSel&&<circle r={22} fill={`${pc}22`} stroke={pc} strokeWidth="1.5"/>}
-              <circle r={isSel?13:10} fill={isSel?pc:"#1e2520"} stroke={pc} strokeWidth={isSel?0:1.5}/>
-              <text textAnchor="middle" dominantBaseline="central" fontSize={isSel?"9":"8"} fill={isSel?"#0a0f0c":pc} fontWeight="700" fontFamily="JetBrains Mono, monospace">P</text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm border border-white/10 rounded-lg px-3 py-1.5">
+        {route && !routeError && <Polyline positions={route} color="#39e079" weight={4} opacity={0.8} />}
+        {userLoc && selected && (!route || routeError) && (
+          <Polyline positions={[userLoc, [selected.lat, selected.lng]]} color="#39e079" weight={3} dashArray="5, 10" opacity={0.6} />
+        )}
+      </MapContainer>
+      <button 
+        className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm border border-white/10 rounded-lg px-3 py-1.5 z-[1000] cursor-pointer hover:bg-black/90 transition-colors"
+        onClick={() => {
+          if (mapInstance && userRealLocation) {
+            mapInstance.flyTo(userRealLocation, 15);
+            onMapClick(userRealLocation[0], userRealLocation[1]);
+          }
+        }}
+      >
         <LocateFixed size={12} className="text-[#39e079]"/>
         <span className="text-[11px] font-mono text-white/70 tracking-wide">YOUR LOCATION</span>
-      </div>
-      <div className="absolute bottom-3 right-3 flex flex-col gap-1.5">
+      </button>
+      <div className="absolute bottom-3 right-3 flex flex-col gap-1.5 z-[1000]">
         {[{color:"bg-[#39e079]",label:"Available"},{color:"bg-[#e0a839]",label:"Limited"},{color:"bg-[#e05555]",label:"Almost full"}].map(({color,label})=>(
           <div key={label} className="flex items-center gap-2 bg-black/70 backdrop-blur-sm border border-white/10 rounded-md px-2.5 py-1">
             <div className={`w-2 h-2 rounded-full ${color}`}/>
@@ -262,7 +314,6 @@ function ParkingCard({ parking, selected, reserved, onClick, onDirections, onRes
           <h3 className="font-semibold text-sm text-foreground truncate">{parking.name}</h3>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">{parking.address}</p>
         </div>
-        <p className="text-base font-bold text-foreground font-mono flex-shrink-0">{parking.price}</p>
       </div>
       <div className="flex items-center gap-3 mb-3">
         <div className="flex items-center gap-1.5"><Clock size={11} className="text-muted-foreground"/><span className="text-xs font-mono text-muted-foreground">{parking.driveTime} drive</span></div>
@@ -271,7 +322,7 @@ function ParkingCard({ parking, selected, reserved, onClick, onDirections, onRes
       <div className="mb-3">
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] font-mono text-muted-foreground tracking-wide uppercase">Availability</span>
-          <span className={`text-[11px] font-mono font-medium ${availColor(parking.available,parking.total)}`}>{parking.available}/{parking.total} spots</span>
+          <span className={`text-[11px] font-mono font-medium ${parking.status === 'FREE' ? 'text-[#39e079]' : 'text-[#e05555]'}`}>{parking.status}</span>
         </div>
         <div className="h-1 rounded-full bg-foreground/8 overflow-hidden">
           <div className={`h-full rounded-full transition-all ${barColor(parking.available,parking.total)}`} style={{width:`${ratio*100}%`}}/>
@@ -442,9 +493,20 @@ function ParkingListPanel({ parkings, search, setSearch, sortBy, setSortBy, filt
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2.5" style={{scrollbarWidth:"none"}}>
         {filtered.length===0 ? (
-          <div className="flex flex-col items-center justify-center h-32 text-center">
-            <CircleParking size={24} className="text-muted-foreground mb-2"/>
-            <p className="text-sm text-muted-foreground">No results found</p>
+          <div className="flex flex-col items-center justify-center h-64 text-center border border-dashed border-gray-700 rounded-lg p-6 bg-gray-900/50">
+            <div className="bg-gray-800 p-3 rounded-full mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <h3 className="text-gray-200 font-semibold text-lg mb-1">No Parking Nearby</h3>
+            <p className="text-gray-400 text-sm">
+              We couldn't find any registered EasyPark zones within a 5km radius of this pin.
+            </p>
+            <p className="text-green-500/80 text-xs mt-4 uppercase tracking-wider font-semibold">
+              Try clicking a busier district
+            </p>
           </div>
         ) : filtered.map(p=>(
           <ParkingCard key={p.id} parking={p} selected={selected?.id===p.id} reserved={reservedIds.has(p.id)}
@@ -482,6 +544,8 @@ function BottomNav({ active, onTab, reservationCount }: { active:BottomTab; onTa
 /* ── Main App ── */
 export default function Main() {
   const navigate=useNavigate();
+  const [userRealLocation, setUserRealLocation] = useState<[number, number] | null>(null);
+  const [userLoc, setUserLoc] = useState<[number, number] | null>(null);
   const [parkings,setParkings]=useState<Parking[]>(PARKINGS_INITIAL);
   const [search,setSearch]=useState("");
   const [sortBy,setSortBy]=useState<SortKey>("distance");
@@ -499,21 +563,36 @@ export default function Main() {
   const reservedIds=new Set(reservations.map(r=>r.parkingId));
 
   useEffect(() => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserRealLocation([pos.coords.latitude, pos.coords.longitude]);
+        setUserLoc([pos.coords.latitude, pos.coords.longitude]);
+      },
+      (err) => {
+        setUserRealLocation([-1.2676, 36.8108]);
+        setUserLoc([-1.2676, 36.8108]); // default Nairobi
+      }
+    );
+  }, []);
+
+  useEffect(() => {
     async function loadSlots() {
+      if (!userLoc) return;
       try {
-        const slots = await apiFetch<any[]>("/api/v1/slots/map-grid/?lat=-1.2676&lng=36.8108");
+        const slots = await apiFetch<any[]>(`/api/v1/slots/map-grid/?lat=${userLoc[0]}&lng=${userLoc[1]}`);
         const mapped: Parking[] = slots.map(s => ({
           id: s.id,
-          name: `Slot ${s.slot_code}`,
+          name: s.slot_code,
           address: "Nairobi",
           distance: "0.1 mi",
           distanceNum: 0.1,
           walkTime: "2 min",
           driveTime: "1 min",
-          price: "$1.00/hr",
-          priceNum: 1.0,
+          price: "",
+          priceNum: 0,
           available: s.current_status === "FREE" ? 1 : 0,
           total: 1,
+          status: s.current_status,
           rating: 5.0,
           features: ["Open Air"],
           lat: s.latitude,
@@ -522,12 +601,13 @@ export default function Main() {
         }));
         setParkings(mapped);
         if (mapped.length > 0) setSelected(mapped[0]);
+        else setSelected(null);
       } catch (e) {
         console.error("Failed to load map grid", e);
       }
     }
     loadSlots();
-  }, []);
+  }, [userLoc]);
 
   const activeReservation=selected ? reservations.find(r=>r.parkingId===selected.id)||null : null;
 
@@ -613,7 +693,7 @@ export default function Main() {
           {/* Live indicator — desktop only */}
           <div className="hidden md:flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-[#39e079] animate-pulse"/>
-            <span className="text-xs font-mono text-muted-foreground">Live · NYC</span>
+            <span className="text-xs font-mono text-muted-foreground">Live Map</span>
           </div>
 
           <ThemeSwitcher/>
@@ -637,7 +717,14 @@ export default function Main() {
 
         {/* Map */}
         <main className="flex-1 relative overflow-hidden p-2 md:p-3">
-          <MapView parkings={parkings} selected={selected} onSelect={p=>{ setSelected(p); setMobileSheetOpen(false); }}/>
+          <MapView 
+            parkings={parkings} 
+            selected={selected} 
+            userLoc={userLoc} 
+            userRealLocation={userRealLocation}
+            onMapClick={(lat, lng) => setUserLoc([lat, lng])}
+            onSelect={p=>{ setSelected(p); setMobileSheetOpen(false); }}
+          />
 
           {/* Desktop bottom chip */}
           {selected&&desktopPanel==="list"&&(
@@ -648,11 +735,9 @@ export default function Main() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground truncate">{selected.name}</p>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span className="text-xs font-mono text-[#39e079]">{selected.available} free</span>
+                  <span className={`text-xs font-mono ${selected.status === 'FREE' ? 'text-[#39e079]' : 'text-[#e05555]'}`}>{selected.status}</span>
                   <span className="text-xs font-mono text-muted-foreground">·</span>
                   <span className="text-xs font-mono text-muted-foreground">{selected.driveTime}</span>
-                  <span className="text-xs font-mono text-muted-foreground">·</span>
-                  <span className="text-xs font-mono font-medium text-foreground">{selected.price}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -675,8 +760,7 @@ export default function Main() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground truncate">{selected.name}</p>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-[#39e079]">{selected.available} free</span>
-                  <span className="text-xs font-mono text-muted-foreground">· {selected.price}</span>
+                  <span className={`text-xs font-mono ${selected.status === 'FREE' ? 'text-[#39e079]' : 'text-[#e05555]'}`}>{selected.status}</span>
                 </div>
               </div>
               <ChevronUp size={16} className="text-muted-foreground"/>
@@ -686,11 +770,15 @@ export default function Main() {
       </div>
 
       {/* Mobile bottom sheet */}
-      <div className="md:hidden">
+      <div className="block md:hidden">
         <Drawer.Root open={mobileSheetOpen} onOpenChange={setMobileSheetOpen} dismissible>
           <Drawer.Portal>
             <Drawer.Overlay className="fixed inset-0 bg-black/40 z-30"/>
             <Drawer.Content className="fixed bottom-0 left-0 right-0 z-40 flex flex-col bg-card rounded-t-2xl border-t border-border" style={{maxHeight:"80vh"}}>
+              <VisuallyHidden>
+                <Drawer.Title>Map Actions</Drawer.Title>
+                <Drawer.Description>Swipe up to view parking options or directions.</Drawer.Description>
+              </VisuallyHidden>
               <div className="flex-shrink-0 flex justify-center pt-3 pb-1">
                 <div className="w-10 h-1 rounded-full bg-foreground/20"/>
               </div>

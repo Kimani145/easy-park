@@ -23,6 +23,12 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem("access_token");
+      window.location.href = "/";
+      throw new Error("Session expired. Please log in again.");
+    }
+
     let errorMsg = "An error occurred";
     try {
       const errBody = await response.json();

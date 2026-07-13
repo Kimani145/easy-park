@@ -155,7 +155,7 @@ class MapGridView(APIView):
         # 5. Build spatial query
         origin = Point(lng, lat, srid=4326)
         slots = ParkingSlot.objects.filter(
-            coordinate__dwithin=(origin, D(m=radius))
+            coordinate__distance_lte=(origin, D(km=5))
         ).values(
             'id', 'slot_code', 'current_status', 'coordinate'
         )

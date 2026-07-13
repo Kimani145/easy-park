@@ -12,10 +12,10 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: Root,
+    element: <Root />,
     children: [
-      { index: true, Component: Login },
-      { path: "signup", Component: Signup },
+      { index: true, element: <Login /> },
+      { path: "signup", element: <Signup /> },
       { 
         path: "app", 
         element: <ProtectedRoute allowedRoles={["DRIVER"]}><Main /></ProtectedRoute> 
