@@ -1,4 +1,8 @@
-const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+// Remove or comment out the production URL
+// const BASE_URL = 'https://easypark-backend.fly.dev';
+
+// Point it to your local Django server
+const BASE_URL = 'http://127.0.0.1:8000';
 
 function getAuthHeaders() {
   const token = localStorage.getItem("access_token");
