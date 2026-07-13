@@ -6,7 +6,7 @@ from django.core.cache import cache
 from django.utils import timezone
 from apps.accounts.models import User, Role
 from apps.accounts.permissions import IsAdmin
-from apps.parking.models import ParkingSlot, Zone, SlotStatus
+from apps.parking.models import ParkingSlot, SlotStatus
 from apps.logs.models import UpdateLog
 from config.constants import ADMIN_STATS_CACHE_TTL
 
@@ -37,14 +37,14 @@ class AdminStatsView(APIView):
         total_slots = ParkingSlot.objects.count()
         occupied_slots = ParkingSlot.objects.filter(current_status=SlotStatus.OCCUPIED).count()
         free_slots = ParkingSlot.objects.filter(current_status=SlotStatus.FREE).count()
-        total_zones = Zone.objects.count()
+        total_zones = ParkingSlot.objects.values('zone').distinct().count()
         total_logs = UpdateLog.objects.count()
 
         # 3. Build recent_activity (last 10 UpdateLog entries).
         # Use select_related to join at the DB level, preventing N+1 queries.
         recent_logs = (
             UpdateLog.objects
-            .select_related('slot__zone', 'user')
+            .select_related('slot', 'user')
             .order_by('-logged_at')[:10]
         )
 
@@ -52,7 +52,7 @@ class AdminStatsView(APIView):
             {
                 'id': str(log.id),
                 'slot_code': log.slot.slot_code,
-                'zone_name': log.slot.zone.name,
+                'zone_name': log.slot.zone,
                 'reported_status': log.reported_status,
                 'source_weight': str(log.source_weight),
                 'logged_at': log.logged_at.isoformat(),

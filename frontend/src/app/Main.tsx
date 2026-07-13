@@ -13,6 +13,7 @@ import {
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { ArrivalConfirmation } from "./components/ArrivalConfirmation";
 import { apiFetch } from "./services/api";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 /* ── Types ── */
 type Parking = {
@@ -543,6 +544,7 @@ function BottomNav({ active, onTab, reservationCount }: { active:BottomTab; onTa
 
 /* ── Main App ── */
 export default function Main() {
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const navigate=useNavigate();
   const [userRealLocation, setUserRealLocation] = useState<[number, number] | null>(null);
   const [userLoc, setUserLoc] = useState<[number, number] | null>(null);
@@ -770,7 +772,9 @@ export default function Main() {
       </div>
 
       {/* Mobile bottom sheet */}
-      <div className="block md:hidden">
+      <div className="block">
+        {/* Mobile Drawer */}
+        {!isDesktop && (
         <Drawer.Root open={mobileSheetOpen} onOpenChange={setMobileSheetOpen} dismissible>
           <Drawer.Portal>
             <Drawer.Overlay className="fixed inset-0 bg-black/40 z-30"/>
@@ -788,6 +792,7 @@ export default function Main() {
             </Drawer.Content>
           </Drawer.Portal>
         </Drawer.Root>
+        )}
       </div>
 
       {/* Bottom nav (mobile) */}

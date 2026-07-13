@@ -44,7 +44,7 @@ def validate_checkin_coordinates(
     # Perform geofence boundary check using Distance measure object D(m=...)
     in_range = ParkingSlot.objects.filter(
         id=slot_id,
-        coordinate__dwithin=(user_point, D(m=GEOFENCE_RADIUS_METERS))
+        location__dwithin=(user_point, D(m=GEOFENCE_RADIUS_METERS))
     ).exists()
 
     if not in_range:
