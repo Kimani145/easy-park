@@ -155,9 +155,10 @@ class MapGridView(APIView):
         # 5. Build spatial query
         origin = Point(lng, lat, srid=4326)
         slots = ParkingSlot.objects.filter(
-            location__distance_lte=(origin, D(km=5))
+            location__dwithin=(origin, D(m=radius))
         ).values(
-            'id', 'slot_code', 'current_status', 'location'
+            'id', 'slot_code', 'street_name', 'zone',
+            'parking_type', 'current_status', 'location'
         )
 
         # 6. Serialize payload (full field names; ~760 B for 8 slots, well within NFR-1 < 5 KB)
@@ -166,6 +167,9 @@ class MapGridView(APIView):
             payload.append({
                 'id':             str(s['id']),
                 'slot_code':      s['slot_code'],
+                'street_name':    s['street_name'],
+                'zone':           s['zone'],
+                'parking_type':   s['parking_type'],
                 'current_status': s['current_status'],
                 'latitude':       s['location'].y,
                 'longitude':      s['location'].x,
