@@ -91,6 +91,11 @@ CORS_ALLOWED_ORIGINS = [
     s.strip() for s in CORS_ALLOWED_ORIGINS_RAW.split(',') if s.strip()
 ] if CORS_ALLOWED_ORIGINS_RAW else []
 
+# Include default Vercel frontend origin
+CORS_ALLOWED_ORIGINS += [
+    "https://easy-park-pi.vercel.app",
+]
+
 # ---------------------------------------------------------------------------
 # Logging — structured, console-only (Azure streams stdout to App Insights)
 # ---------------------------------------------------------------------------
