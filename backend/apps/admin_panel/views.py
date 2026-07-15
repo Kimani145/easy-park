@@ -9,6 +9,7 @@ from apps.accounts.permissions import IsAdmin
 from apps.parking.models import ParkingSlot, SlotStatus
 from apps.logs.models import UpdateLog
 from config.constants import ADMIN_STATS_CACHE_TTL
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,15 @@ CACHE_TTL = ADMIN_STATS_CACHE_TTL
 class AdminStatsView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
+    @extend_schema(
+        summary="Admin dashboard statistics",
+        description=(
+            "Returns aggregate counts and last 10 activity log entries. "
+            "Requires ADMIN role. Response cached for 30 seconds."
+        ),
+        tags=["Admin"],
+        responses={200: dict}
+    )
     def get(self, request, *args, **kwargs):
         # 1. Check cache
         try:

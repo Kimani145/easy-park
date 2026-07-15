@@ -1,0 +1,413 @@
+openapi: 3.0.3
+info:
+  title: EasyPark API
+  version: 1.0.0
+  description: Geofenced parking management API. All endpoints except /auth/register/
+    and /auth/login/ require a Bearer JWT in the Authorization header. Obtain a token
+    via POST /api/v1/auth/login/.
+paths:
+  /api/v1/admin/stats/:
+    get:
+      operationId: admin_stats_retrieve
+      description: Returns aggregate counts and last 10 activity log entries. Requires
+        ADMIN role. Response cached for 30 seconds.
+      summary: Admin dashboard statistics
+      tags:
+      - Admin
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: 'Returns access and refresh JWTs. The access token contains ''role''
+        and ''username'' claims. Use the access token as: Authorization: Bearer <token>'
+      summary: Login — obtain JWT tokens
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/register/:
+    post:
+      operationId: auth_register_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistrationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserRegistrationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserRegistrationRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRegistration'
+          description: ''
+  /api/v1/slots/{id}/checkin/:
+    post:
+      operationId: slots_checkin_create
+      description: Validates that the driver is within 15 metres of the slot. Also
+        runs a velocity check to reject GPS spoofing. Returns 400 if outside the geofence
+        or velocity is implausible. Returns 409 if the slot is already occupied.
+      summary: Driver check-in (geofenced)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Parking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckinRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CheckinRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CheckinRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/slots/{slot_id}/override/:
+    patch:
+      operationId: slots_override_partial_update
+      description: Requires MARSHAL or ADMIN role. Weight 1.00 always overrides driver
+        weight 0.40. Creates an UpdateLog entry for audit trail.
+      summary: Marshal override — force slot status
+      parameters:
+      - in: path
+        name: slot_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Marshal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOverrideRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOverrideRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOverrideRequest'
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/slots/map-grid/:
+    get:
+      operationId: slots_map_grid_retrieve
+      description: Returns parking slots within `radius` metres of the given lat/lng.
+        Default radius 500m, max 1000m. Response is cached for 10 seconds. Payload
+        < 5KB at 1km radius (NFR-1 compliant).
+      summary: Map grid — slots near a location
+      parameters:
+      - in: query
+        name: lat
+        schema:
+          type: number
+          format: double
+        description: Latitude (-90 to 90)
+        required: true
+      - in: query
+        name: lng
+        schema:
+          type: number
+          format: double
+        description: Longitude (-180 to 180)
+        required: true
+      - in: query
+        name: radius
+        schema:
+          type: number
+          format: double
+        description: Search radius in metres (50–1000, default 500)
+      tags:
+      - Parking
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+                description: Unspecified response body
+          description: ''
+  /api/v1/sync/bulk/:
+    post:
+      operationId: sync_bulk_create
+      description: Accepts a batch of queued marshal actions collected offline. Actions
+        are replayed in chronological order. Idempotency is enforced at DB level —
+        duplicate keys are skipped safely.
+      summary: Bulk offline sync
+      tags:
+      - Marshal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkSyncRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BulkSyncRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BulkSyncRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+components:
+  schemas:
+    ActionRequest:
+      type: object
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 255
+        slot_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          minLength: 1
+          maxLength: 50
+        payload:
+          type: object
+          additionalProperties: {}
+        original_timestamp:
+          type: string
+          format: date-time
+      required:
+      - action
+      - idempotency_key
+      - original_timestamp
+      - payload
+      - slot_id
+    BulkSyncRequest:
+      type: object
+      properties:
+        sync_batch_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        client_device_time:
+          type: string
+          format: date-time
+        queued_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionRequest'
+          maxItems: 100
+          minItems: 1
+      required:
+      - client_device_time
+      - queued_actions
+      - sync_batch_id
+    CheckinRequest:
+      type: object
+      properties:
+        latitude:
+          type: number
+          format: double
+          maximum: 90.0
+          minimum: -90.0
+        longitude:
+          type: number
+          format: double
+          maximum: 180.0
+          minimum: -180.0
+      required:
+      - latitude
+      - longitude
+    PatchedOverrideRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+    RoleEnum:
+      enum:
+      - DRIVER
+      - MARSHAL
+      - ADMIN
+      type: string
+      description: |-
+        * `DRIVER` - Driver
+        * `MARSHAL` - Marshal
+        * `ADMIN` - Admin
+    StatusEnum:
+      enum:
+      - FREE
+      - OCCUPIED
+      type: string
+      description: |-
+        * `FREE` - Free
+        * `OCCUPIED` - Occupied
+    TokenObtainRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    UserRegistration:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+      required:
+      - email
+    UserRegistrationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+          maxLength: 128
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+      required:
+      - email
+      - password
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+servers:
+- url: https://easypark-backend.fly.dev
+  description: Production
+- url: http://127.0.0.1:8000
+  description: Local dev

@@ -16,6 +16,7 @@ from config.constants import DRIVER_SOURCE_WEIGHT, MAP_GRID_CACHE_TTL
 from django.core.cache import cache
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 class CheckinView(APIView):
     """
@@ -23,6 +24,18 @@ class CheckinView(APIView):
     """
     permission_classes = [IsAuthenticated, IsDriver]
 
+    @extend_schema(
+        summary="Driver check-in (geofenced)",
+        description=(
+            "Validates that the driver is within 15 metres of the slot. "
+            "Also runs a velocity check to reject GPS spoofing. "
+            "Returns 400 if outside the geofence or velocity is implausible. "
+            "Returns 409 if the slot is already occupied."
+        ),
+        tags=["Parking"],
+        request=CheckinSerializer,
+        responses={200: dict, 400: dict, 404: dict, 409: dict}
+    )
     def post(self, request, id):
         slot_id = str(id)
         
@@ -128,6 +141,25 @@ class MapGridView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Map grid — slots near a location",
+        description=(
+            "Returns parking slots within `radius` metres of the given "
+            "lat/lng. Default radius 500m, max 1000m. "
+            "Response is cached for 10 seconds. "
+            "Payload < 5KB at 1km radius (NFR-1 compliant)."
+        ),
+        parameters=[
+            OpenApiParameter(name='lat', type=float, required=True,
+                             description='Latitude (-90 to 90)'),
+            OpenApiParameter(name='lng', type=float, required=True,
+                             description='Longitude (-180 to 180)'),
+            OpenApiParameter(name='radius', type=float, required=False,
+                             description='Search radius in metres (50–1000, default 500)'),
+        ],
+        tags=["Parking"],
+        responses={200: list}
+    )
     def get(self, request):
         # 1. Validate query params with MapGridQuerySerializer
         serializer = MapGridQuerySerializer(data=request.query_params)

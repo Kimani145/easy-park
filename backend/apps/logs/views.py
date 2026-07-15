@@ -13,6 +13,7 @@ from apps.logs.serializers import OverrideSerializer
 from apps.logs.models import UpdateLog
 from apps.logs.conflict import get_source_weight, resolve_slot_status
 from config.constants import MARSHAL_SOURCE_WEIGHT
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 class MarshalOverrideView(APIView):
     """
@@ -20,6 +21,17 @@ class MarshalOverrideView(APIView):
     """
     permission_classes = [IsAuthenticated, IsMarshal | IsAdmin]
 
+    @extend_schema(
+        summary="Marshal override — force slot status",
+        description=(
+            "Requires MARSHAL or ADMIN role. "
+            "Weight 1.00 always overrides driver weight 0.40. "
+            "Creates an UpdateLog entry for audit trail."
+        ),
+        tags=["Marshal"],
+        request=OverrideSerializer,
+        responses={200: dict, 400: dict, 404: dict}
+    )
     def patch(self, request, slot_id):
         # 1. Deserialize input
         serializer = OverrideSerializer(data=request.data)
@@ -85,6 +97,17 @@ class BulkSyncView(APIView):
     """
     permission_classes = [IsAuthenticated, IsMarshal]
 
+    @extend_schema(
+        summary="Bulk offline sync",
+        description=(
+            "Accepts a batch of queued marshal actions collected offline. "
+            "Actions are replayed in chronological order. "
+            "Idempotency is enforced at DB level — duplicate keys are skipped safely."
+        ),
+        tags=["Marshal"],
+        request=BulkSyncSerializer,
+        responses={200: dict, 400: dict}
+    )
     def post(self, request):
         # 1. Deserialize input
         serializer = BulkSyncSerializer(data=request.data)

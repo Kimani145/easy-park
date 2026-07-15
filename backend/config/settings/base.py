@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'drf_spectacular',
     
     # Local apps
     'apps.accounts',
@@ -148,6 +149,31 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'EasyPark API',
+    'DESCRIPTION': (
+        'Geofenced parking management API. '
+        'All endpoints except /auth/register/ and /auth/login/ '
+        'require a Bearer JWT in the Authorization header. '
+        'Obtain a token via POST /api/v1/auth/login/.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/v1/',
+    # JWT security scheme
+    'SECURITY': [{'jwtAuth': []}],
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,
+        'displayRequestDuration': True,
+    },
+    'SERVERS': [
+        {'url': 'https://easypark-backend.fly.dev', 'description': 'Production'},
+        {'url': 'http://127.0.0.1:8000', 'description': 'Local dev'},
+    ],
 }
 
 # Logging configuration

@@ -15,9 +15,18 @@ def health_check(request):
     return JsonResponse({'status': 'ok'})
 
 
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularSwaggerView,
+    SpectacularRedocView,
+)
+
 urlpatterns = [
     path('health/', health_check, name='health_check'),
     path('admin/', admin.site.urls),
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path('api/v1/auth/', include('apps.accounts.urls', namespace='accounts')),
     path('api/v1/slots/', include('apps.parking.urls', namespace='parking')),
     path('api/v1/', include('apps.logs.urls')),

@@ -10,3 +10,4 @@ redis
 
 
 gunicorn==21.*
+drf-spectacular==0.27.*

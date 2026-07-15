@@ -1,0 +1,43 @@
+{
+  "id": "easypark-env",
+  "name": "EasyPark",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "https://easypark-backend.fly.dev",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "driver_email",
+      "value": "driver@easypark.test",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "driver_password",
+      "value": "TestDriver99!",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "marshal_email",
+      "value": "marshal@easypark.test",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "marshal_password",
+      "value": "TestMarshal99!",
+      "type": "secret",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}
